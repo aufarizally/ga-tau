@@ -1,78 +1,89 @@
 import streamlit as st
-import math
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from scipy.optimize import linprog
 
-st.set_page_config(page_title="Sistem Operasi Franchise", layout="wide")
+# Judul Aplikasi
+st.title("Optimal Production of Shoes")
 
-st.title("📦📈🔁 Sistem Operasi Franchise Kopi")
-st.markdown("Gabungan Model: **Optimasi Produksi, Persediaan, dan Antrian**")
+# Input dari Pengguna
+st.header("Input Data")
+profit_school = st.number_input("Keuntungan per unit Sepatu Sekolah (Rp):", min_value=0)
+profit_sport = st.number_input("Keuntungan per unit Sepatu Olahraga (Rp):", min_value=0)
+profit_formal = st.number_input("Keuntungan per unit Sepatu Kerja Formal (Rp):", min_value=0)
 
-st.header("1️⃣ Optimasi Produksi")
-st.markdown("*Hitung total profit berdasarkan jumlah minuman yang diproduksi*")
+# Kebutuhan bahan baku per unit
+material_school = st.number_input("Kebutuhan bahan baku per unit Sepatu Sekolah (m²):", min_value=0)
+material_sport = st.number_input("Kebutuhan bahan baku per unit Sepatu Olahraga (m²):", min_value=0)
+material_formal = st.number_input("Kebutuhan bahan baku per unit Sepatu Kerja Formal (m²):", min_value=0)
 
-produk = ["Latte", "Cappuccino", "Matcha", "Hazelnut", "Red Velvet"]
-profit_per_cup = [5000, 6000, 7000, 8000, 9000]
-waktu_per_cup = [2, 3, 2, 4, 3]  # menit
+# Kebutuhan jam kerja per unit
+time_school = st.number_input("Kebutuhan jam kerja per unit Sepatu Sekolah (jam):", min_value=0)
+time_sport = st.number_input("Kebutuhan jam kerja per unit Sepatu Olahraga (jam):", min_value=0)
+time_formal = st.number_input("Kebutuhan jam kerja per unit Sepatu Kerja Formal (jam):", min_value=0)
 
-produksi = []
-total_waktu = 0
-total_profit = 0
+# Ketersediaan sumber daya
+total_material = st.number_input("Total bahan baku yang tersedia (m²):", min_value=0)
+total_time = st.number_input("Total jam tenaga kerja yang tersedia (jam):", min_value=0)
 
-st.subheader("Input Jumlah Produksi Harian")
-col1, col2, col3 = st.columns(3)
-with col1:
-    for i, p in enumerate(produk):
-        jumlah = st.number_input(f"{p} (cup)", min_value=0, value=0, step=1, key=f"prod_{i}")
-        produksi.append(jumlah)
-        total_waktu += jumlah * waktu_per_cup[i]
-        total_profit += jumlah * profit_per_cup[i]
+# Permintaan maksimal pasar
+max_demand_school = st.number_input("Permintaan maksimal pasar Sepatu Sekolah (unit):", min_value=0)
+max_demand_sport = st.number_input("Permintaan maksimal pasar Sepatu Olahraga (unit):", min_value=0)
+max_demand_formal = st.number_input("Permintaan maksimal pasar Sepatu Kerja Formal (unit):", min_value=0)
 
-kapasitas_waktu = 1200  # menit/hari
-st.info(f"⏱️ Total waktu produksi: {total_waktu} menit dari maksimum {kapasitas_waktu} menit")
-st.success(f"💰 Total estimasi profit: Rp{total_profit:,.0f}")
+# Tombol untuk menghitung
+if st.button("Hitung Jumlah Optimal"):
+    # Koefisien fungsi tujuan (negatif karena linprog meminimalkan)
+    c = [-profit_school, -profit_sport, -profit_formal]
 
-if total_waktu > kapasitas_waktu:
-    st.warning("⚠️ Produksi melebihi kapasitas waktu harian!")
+    # Koefisien batasan
+    A = [
+        [material_school, material_sport, material_formal],  # Bahan baku
+        [time_school, time_sport, time_formal]                # Jam kerja
+    ]
+    b = [total_material, total_time]
 
-st.divider()
-st.header("2️⃣ Model Persediaan (EOQ & ROP)")
+    # Batasan permintaan
+    bounds = [(0, max_demand_school), (0, max_demand_sport), (0, max_demand_formal)]
 
-st.markdown("*Hitung jumlah optimal pembelian bahan baku*")
+    # Menghitung solusi
+    res = linprog(c, A_ub=A, b_ub=b, bounds=bounds, method='highs')
 
-bahan = ["Susu Cair", "Kopi Bubuk", "Bubuk Matcha", "Sirup Hazelnut", "Red Velvet"]
-D = st.number_input("Permintaan tahunan (liter/unit)", value=21900)
-S = st.number_input("Biaya pemesanan (Rp)", value=100000)
-H = st.number_input("Biaya penyimpanan/tahun (Rp/unit)", value=500)
-lead_time = st.number_input("Lead time (hari)", value=1)
-kebutuhan_per_hari = st.number_input("Kebutuhan rata-rata per hari", value=60.0)
-deviasi = st.number_input("Deviasi standar kebutuhan per hari", value=5.0)
+    if res.success:
+        optimal_production = res.x
+        total_profit = -res.fun
 
-st.subheader("📦 Hasil EOQ dan ROP")
+        # Menampilkan hasil
+        st.subheader("Jumlah Sepatu Optimal yang Harus Diproduksi:")
+        st.write(f"Sepatu Sekolah: {int(optimal_production[0])} pasang")
+        st.write(f"Sepatu Olahraga: {int(optimal_production[1])} pasang")
+        st.write(f"Sepatu Kerja Formal: {int(optimal_production[2])} pasang")
+        st.write(f"Total Keuntungan Maksimal (Rp): {int(total_profit)}")
+    else:
+        st.error("Tidak ada solusi yang ditemukan.")
 
-eoq = math.sqrt((2 * D * S) / H)
-rop = kebutuhan_per_hari * lead_time + 1.65 * deviasi
+# Visualisasi area feasible (jika hanya 2 variabel)
+if st.checkbox("Tampilkan Visualisasi Area Feasible"):
+    # Menggunakan hanya dua produk untuk visualisasi
+    fig, ax = plt.subplots()
+    x = np.linspace(0, max_demand_school, 100)
+    y1 = (total_material - material_school * x) / material_sport
+    y2 = (total_time - time_school * x) / time_sport
 
-st.write(f"🔹 **EOQ (Jumlah optimal pemesanan)**: {eoq:.2f} unit")
-st.write(f"🔹 **ROP (Titik pemesanan ulang)**: {rop:.2f} unit")
+    ax.plot(x, y1, label='Bahan Baku')
+    ax.plot(x, y2, label='Jam Kerja')
+    ax.fill_between(x, np.minimum(y1, y2), color='gray', alpha=0.5)
+    ax.set_xlim(0, max_demand_school)
+    ax.set_ylim(0, max_demand_sport)
+    ax.set_xlabel('Sepatu Sekolah')
+    ax.set_ylabel('Sepatu Olahraga')
+    ax.set_title('Area Feasible')
+    ax.legend()
+    st.pyplot(fig)
 
-st.divider()
-st.header("3️⃣ Model Antrian")
-
-st.markdown("*Evaluasi antrian pelanggan di outlet atau antrian bahan baku di gudang*")
-
-mode = st.selectbox("Jenis Antrian", ["Antrian Pelanggan Outlet", "Antrian Restok Bahan di Gudang"])
-
-lambda_rate = st.number_input("Rata-rata kedatangan per jam (λ)", value=90 if mode == "Antrian Pelanggan Outlet" else 10.0)
-mu_rate = st.number_input("Rata-rata pelayanan per jam per server (μ)", value=30.0 if mode == "Antrian Pelanggan Outlet" else 2.0)
-c = st.number_input("Jumlah server/barista/petugas (c)", min_value=1, value=3 if mode == "Antrian Pelanggan Outlet" else 2)
-
-rho = lambda_rate / (c * mu_rate)
-
-st.subheader("📊 Hasil Evaluasi Antrian")
-st.write(f"🔸 Utilisasi sistem (ρ): {rho:.2f}")
-
-if rho >= 1:
-    st.error("❌ Sistem tidak stabil! Tingkat kedatangan melebihi kapasitas pelayanan.")
-else:
-    st.success("✅ Sistem stabil")
-    Lq = ((lambda_rate**2) / (mu_rate * (mu_rate - lambda_rate/c))) if c == 1 else None
-    st.write("(Estimasi waktu tunggu dan panjang antrian lebih kompleks untuk c > 1, gunakan simulasi lanjut)")
+# Simpan laporan dalam PDF atau Excel (opsional)
+if st.button("Simpan Laporan"):
+    # Simpan laporan ke dalam format yang diinginkan
+    # (Implementasi untuk menyimpan laporan bisa ditambahkan di sini)
+    st.success("Laporan berhasil disimpan!")
